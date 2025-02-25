@@ -1,8 +1,7 @@
 from typing import Union
 from fastapi import FastAPI
 from model import *
-from uvicorn import Config, Server
-import asyncio
+
 
 model = None
 tokenizer = None
@@ -37,8 +36,3 @@ def generate_query(question: str, db_schema: str):
     
     return query
 
-
-config = Config(app)
-server = Server(config=config)
-loop = asyncio.get_event_loop()
-loop.create_task(server.serve())
