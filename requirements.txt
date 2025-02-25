@@ -2,4 +2,5 @@ torch
 transformers 
 bitsandbytes 
 accelerate 
-fastapi[standard]
+fastapi
+uvicorn
