@@ -1,21 +1,23 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
+device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+
 
 def load_model():    
-    available_memory = torch.cuda.get_device_properties(0).total_memory
+    #available_memory = torch.cuda.get_device_properties(0).total_memory
     
     model_name = "defog/sqlcoder-7b-2"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    if available_memory > 20e9:
+    if True:
         # if you have atleast 20GB of GPU memory, run load the model in float16
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             trust_remote_code=True,
             torch_dtype=torch.float16,
-            device_map="auto",
+            device_map={"": device},
             use_cache=True,
-        )
+        ).to(device)
     else:
         # else, load in 4 bits – this is slower and less accurate
         model = AutoModelForCausalLM.from_pretrained(
@@ -23,9 +25,17 @@ def load_model():
             trust_remote_code=True,
             # torch_dtype=torch.float16,
             load_in_4bit=True,
-            device_map="auto",
+            device_map="mps",
             use_cache=True,
         )
+        # model = AutoModelForCausalLM.from_pretrained(
+        #     model_name,
+        #     trust_remote_code=True,
+        #     # torch_dtype=torch.float16,
+        #     load_in_4bit=True,
+        #     device_map="mps",
+        #     use_cache=True,
+        # )
     return model, tokenizer
 
 def prepare_prompt(question = "Give me the list of the most downloaded files?", db_schema='''CREATE TABLE files (file_id INT PRIMARY KEY, file_name VARCHAR(255), download_count INT);'''):
@@ -47,7 +57,7 @@ def prepare_prompt(question = "Give me the list of the most downloaded files?", 
 
 
 def generate_query(prompt,model, tokenizer):
-    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+    inputs = tokenizer(prompt, return_tensors="pt").to("mps")
     generated_ids = model.generate(
         **inputs,
         num_return_sequences=1,
@@ -60,9 +70,11 @@ def generate_query(prompt,model, tokenizer):
         top_p=1,
     )
     outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize()
-
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()  # Clears unused memory
+        torch.mps.synchronize()  # Waits for all operations to finish
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
     return outputs[0].split("```sql")[1].split(";")[0]
